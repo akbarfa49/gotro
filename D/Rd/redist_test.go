@@ -1,7 +1,6 @@
 package Rd
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/ory/dockertest/v3"
 	"github.com/rueian/rueidis"
+	redis "github.com/rueian/rueidis"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -38,30 +38,25 @@ func prepareDb(onReady func(rd rueidis.Client) int) {
 		return
 	}
 	var rd rueidis.Client
-
+	var newConnStr string
 	if err := globalPool.Retry(func() error {
 		var err error
 		// m, _ := resource.Container.NetworkSettings.Ports[docker.Port(rdPort+`/tcp`)]
 		// log.Println(m)
 		// return errors.New(`nothing`)
 
-		s := fmt.Sprintf(connStr, resource.GetPort(rdPort))
-
-		reconnect = func() *RedisSession {
-			rs := NewRedisSession(s, ``, 0, `nihao`)
-			return rs
-		}
-		rc := reconnect()
-		if rc == nil {
-			return errors.New(`empty connection`)
-		}
-		rd = rc.Pool
+		newConnStr = fmt.Sprintf(connStr, resource.GetPort(rdPort))
+		_, err = redis.NewClient(redis.ClientOption{
+			InitAddress: []string{newConnStr},
+			Password:    ``,
+			SelectDB:    0,
+		})
 		return err
 	}); err != nil {
 		log.Printf("Could not connect to docker: %s\n", err)
 		return
 	}
-
+	rd = NewRedisSession(newConnStr, ``, 0, `nihao`).Pool
 	code := onReady(rd)
 	if err := globalPool.Purge(resource); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
